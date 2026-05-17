@@ -2,6 +2,8 @@
 
 A browser-based editor for **EuroScope GRpluginMaps v1.6** map files (`GRpluginMaps.txt`). Load, visualise, and edit ground radar map data on a live Leaflet map, then save changes directly back to a GitHub repository as a pull request.
 
+> **Live demo:** [https://dev.jkstr.eu](https://dev.jkstr.eu)
+
 ---
 
 ## Tech Stack
