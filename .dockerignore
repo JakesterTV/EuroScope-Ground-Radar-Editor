@@ -1,0 +1,14 @@
+node_modules
+dist
+.env
+.env.local
+.env.*
+!.env.example
+.git
+.gitignore
+.gitattributes
+.github
+.vscode
+*.code-workspace
+*.bak
+*.log
