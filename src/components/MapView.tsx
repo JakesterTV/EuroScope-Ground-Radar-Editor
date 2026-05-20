@@ -735,7 +735,7 @@ interface DrawingHandlerProps {
   activeMapId: string | null;
   onLineDrawn: (lat1: number, lon1: number, lat2: number, lon2: number) => void;
   onPolygonVertex: (lat: number, lon: number) => void;
-  onPolygonClose: () => void;
+  onPolygonClose: (trimLast: boolean) => void;
   onCancelDraw: () => void;
   onTextPlace: (lat: number, lon: number) => void;
   drawPoints: LatLngTuple[];
@@ -780,7 +780,7 @@ function DrawingHandler({
         if (firstPx.distanceTo(clickPx) < POLY_SNAP_CLOSE_PX) {
           nearCloseRef.current = false;
           setNearClose(false);
-          onPolygonClose();
+          onPolygonClose(false);
           return;
         }
       }
@@ -806,7 +806,7 @@ function DrawingHandler({
       if (editMode === 'draw-polygon') {
         nearCloseRef.current = false;
         setNearClose(false);
-        onPolygonClose();
+        onPolygonClose(true);
       }
       L.DomEvent.stop(e);
     },
@@ -817,7 +817,7 @@ function DrawingHandler({
     if (editMode !== 'draw-polygon' && editMode !== 'draw-line') return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Enter' && editMode === 'draw-polygon') {
-        onPolygonClose();
+        onPolygonClose(false);
       } else if (e.key === 'Escape') {
         onCancelDraw();
       }
@@ -1002,12 +1002,12 @@ export function MapView({ showPdfOverlay, onClosePdfOverlay }: MapViewProps = {}
     []
   );
 
-  const handlePolygonClose = useCallback(() => {
-    // Read from ref — always current regardless of React render batching.
-    // A dblclick fires click+click+dblclick, so trim the last vertex (added
-    // by the first click of the double-click) before committing.
+  const handlePolygonClose = useCallback((trimLast: boolean) => {
+    // On dblclick, Leaflet fires click+click+dblclick. Both clicks add a vertex
+    // so the last one is a duplicate — trim it. Snap-close and Enter close
+    // without adding an extra vertex, so do NOT trim in those cases.
     const raw = drawPointsRef.current;
-    const pts = raw.length > 0 ? raw.slice(0, -1) : raw;
+    const pts = trimLast && raw.length > 0 ? raw.slice(0, -1) : raw;
     if (pts.length < 3) {
       clearDrawPoints();
       return;
