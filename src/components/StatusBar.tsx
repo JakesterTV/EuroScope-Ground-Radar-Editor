@@ -17,7 +17,7 @@ export function StatusBar({ devMode, onToggleDevMode }: { devMode: boolean; onTo
 
   const modeLabel: Record<string, string> = {
     select:       '↖ Select / Edit vertices',
-    'draw-line':  '╱ Draw Line  (click start, click end)',
+    'draw-line':  '╱ Draw Line  (click points, double-click or Enter to finish)',
     'draw-polygon': '⬡ Draw Polygon  (click points, double-click to close)',
     delete:       '✕ Delete  (click element to remove)',
   };

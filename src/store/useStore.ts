@@ -127,6 +127,8 @@ interface AppStore {
     lon2: number,
     name?: string
   ): void;
+  /** Create a multi-point path from 2+ points. 2 points → LineElement, 3+ → PathElement. */
+  addPathToSection(mapId: string, points: [number, number][], name?: string): void;
   addPolygonToSection(mapId: string, coords: [number, number][], name?: string): void;
   addTextToSection(mapId: string, lat: number, lon: number, text: string, name?: string): void;
   updateTextElement(mapId: string, elementId: string, text: string, lat: number, lon: number): void;
@@ -508,6 +510,49 @@ export const useStore = create<AppStore>()(
           section.items.push({ kind: 'comment', text: `// ${name}` } as unknown as SectionItem);
         }
         section.items.push(newLine as unknown as SectionItem);
+        draft.isDirty = true;
+      });
+    },
+
+    addPathToSection(mapId, points, name) {
+      set(draft => {
+        if (!draft.parsedFile) return;
+        const maps = draft.parsedFile.maps as unknown as MapSection[];
+        draft.undoStack.push(snapshotMaps(maps));
+        if (draft.undoStack.length > MAX_UNDO) draft.undoStack.shift();
+        draft.redoStack = [];
+        const section = maps.find(m => m.id === mapId);
+        if (!section) return;
+        if (name) {
+          section.items.push({ kind: 'comment', text: `// ${name}` } as unknown as SectionItem);
+        }
+        if (points.length === 2) {
+          const newLine: LineElement = {
+            kind: 'line',
+            id: `el-new-${Date.now()}`,
+            p1: makeCoord(points[0][0], points[0][1], 'decimal'),
+            p2: makeCoord(points[1][0], points[1][1], 'decimal'),
+            elementName: name ?? undefined,
+          };
+          section.items.push(newLine as unknown as SectionItem);
+        } else {
+          const segments: LineElement[] = [];
+          for (let i = 0; i < points.length - 1; i++) {
+            segments.push({
+              kind: 'line',
+              id: `el-seg-${Date.now()}-${i}`,
+              p1: makeCoord(points[i][0], points[i][1], 'decimal'),
+              p2: makeCoord(points[i + 1][0], points[i + 1][1], 'decimal'),
+            });
+          }
+          const newPath: PathElement = {
+            kind: 'path',
+            id: `el-new-${Date.now()}`,
+            lines: segments,
+            elementName: name ?? undefined,
+          };
+          section.items.push(newPath as unknown as SectionItem);
+        }
         draft.isDirty = true;
       });
     },

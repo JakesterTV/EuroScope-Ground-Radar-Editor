@@ -733,9 +733,9 @@ const POLY_SNAP_CLOSE_PX = 14;
 interface DrawingHandlerProps {
   editMode: EditMode;
   activeMapId: string | null;
-  onLineDrawn: (lat1: number, lon1: number, lat2: number, lon2: number) => void;
   onPolygonVertex: (lat: number, lon: number) => void;
   onPolygonClose: (trimLast: boolean) => void;
+  onLineClose: (trimLast: boolean) => void;
   onCancelDraw: () => void;
   onTextPlace: (lat: number, lon: number) => void;
   drawPoints: LatLngTuple[];
@@ -743,9 +743,9 @@ interface DrawingHandlerProps {
 
 function DrawingHandler({
   editMode,
-  onLineDrawn,
   onPolygonVertex,
   onPolygonClose,
+  onLineClose,
   onCancelDraw,
   onTextPlace,
   drawPoints,
@@ -791,11 +791,7 @@ function DrawingHandler({
       const sLat = snapped.lat;
       const sLon = snapped.lon;
       if (editMode === 'draw-line') {
-        if (drawPoints.length === 0) {
-          onPolygonVertex(sLat, sLon);
-        } else {
-          onLineDrawn(drawPoints[0][0], drawPoints[0][1], sLat, sLon);
-        }
+        onPolygonVertex(sLat, sLon);
       } else if (editMode === 'draw-polygon') {
         onPolygonVertex(sLat, sLon);
       } else if (editMode === 'draw-text') {
@@ -807,24 +803,26 @@ function DrawingHandler({
         nearCloseRef.current = false;
         setNearClose(false);
         onPolygonClose(true);
+      } else if (editMode === 'draw-line') {
+        onLineClose(true);
       }
       L.DomEvent.stop(e);
     },
   });
 
-  // Enter → commit polygon; Escape → cancel draw (both modes)
   useEffect(() => {
     if (editMode !== 'draw-polygon' && editMode !== 'draw-line') return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && editMode === 'draw-polygon') {
-        onPolygonClose(false);
+      if (e.key === 'Enter') {
+        if (editMode === 'draw-polygon') onPolygonClose(false);
+        else if (editMode === 'draw-line') onLineClose(false);
       } else if (e.key === 'Escape') {
         onCancelDraw();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [editMode, onPolygonClose, onCancelDraw]);
+  }, [editMode, onPolygonClose, onLineClose, onCancelDraw]);
 
   // Visual snap-close indicator: green ring on first vertex when cursor is near it
   if (editMode === 'draw-polygon' && drawPoints.length >= 3 && nearClose) {
@@ -905,7 +903,7 @@ export function MapView({ showPdfOverlay, onClosePdfOverlay }: MapViewProps = {}
   const editMode = useStore(s => s.editMode);
   const selectElement = useStore(s => s.selectElement);
   const deleteElement = useStore(s => s.deleteElement);
-  const addLineToSection = useStore(s => s.addLineToSection);
+  const addPathToSection = useStore(s => s.addPathToSection);
   const addPolygonToSection = useStore(s => s.addPolygonToSection);
   const addTextToSection = useStore(s => s.addTextToSection);
   const setEditMode = useStore(s => s.setEditMode);
@@ -916,9 +914,9 @@ export function MapView({ showPdfOverlay, onClosePdfOverlay }: MapViewProps = {}
   const [placingAt, setPlacingAt] = useState<[number, number] | null>(null);
 
   // Pending drawn geometry awaiting name prompt
-  type PendingLine = { mapId: string; lat1: number; lon1: number; lat2: number; lon2: number; promptAt: [number, number] };
+  type PendingPath = { mapId: string; points: [number, number][]; promptAt: [number, number] };
   type PendingPoly = { mapId: string; coords: [number, number][]; promptAt: [number, number] };
-  const [pendingLine, setPendingLine] = useState<PendingLine | null>(null);
+  const [pendingPath, setPendingPath] = useState<PendingPath | null>(null);
   const [pendingPoly, setPendingPoly] = useState<PendingPoly | null>(null);
 
   // Drawing state — keep a ref in sync so close handler never has a stale closure
@@ -984,15 +982,28 @@ export function MapView({ showPdfOverlay, onClosePdfOverlay }: MapViewProps = {}
     [addDrawPoint]
   );
 
-  const handleLineDraw = useCallback(
-    (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const handleLineClose = useCallback(
+    (trimLast: boolean) => {
+      const raw = drawPointsRef.current;
+      const pts = trimLast && raw.length > 0 ? raw.slice(0, -1) : raw;
+      if (pts.length < 2) {
+        clearDrawPoints();
+        setEditMode('select');
+        return;
+      }
       const target = activeDrawGroupId ?? parsedFile?.maps.find(m => m.visible)?.id;
-      if (!target) return;
-      const promptAt: [number, number] = [(lat1 + lat2) / 2, (lon1 + lon2) / 2];
-      setPendingLine({ mapId: target, lat1, lon1, lat2, lon2, promptAt });
+      if (target) {
+        const points = pts as [number, number][];
+        const promptAt: [number, number] = [
+          points.reduce((s, c) => s + c[0], 0) / points.length,
+          points.reduce((s, c) => s + c[1], 0) / points.length,
+        ];
+        setPendingPath({ mapId: target, points, promptAt });
+      }
       clearDrawPoints();
+      setEditMode('select');
     },
-    [activeDrawGroupId, parsedFile, clearDrawPoints]
+    [activeDrawGroupId, parsedFile, clearDrawPoints, setEditMode]
   );
 
   const handleTextPlace = useCallback(
@@ -1112,17 +1123,17 @@ export function MapView({ showPdfOverlay, onClosePdfOverlay }: MapViewProps = {}
         />
       )}
 
-      {/* Name prompt for a just-drawn line */}
-      {pendingLine && (
+      {/* Name prompt for a just-drawn path/line */}
+      {pendingPath && (
         <NamePromptOverlay
-          coord={pendingLine.promptAt}
+          coord={pendingPath.promptAt}
           onConfirm={(name) => {
-            addLineToSection(pendingLine.mapId, pendingLine.lat1, pendingLine.lon1, pendingLine.lat2, pendingLine.lon2, name || undefined);
-            setPendingLine(null);
+            addPathToSection(pendingPath.mapId, pendingPath.points, name || undefined);
+            setPendingPath(null);
           }}
           onSkip={() => {
-            addLineToSection(pendingLine.mapId, pendingLine.lat1, pendingLine.lon1, pendingLine.lat2, pendingLine.lon2);
-            setPendingLine(null);
+            addPathToSection(pendingPath.mapId, pendingPath.points);
+            setPendingPath(null);
           }}
         />
       )}
@@ -1154,27 +1165,28 @@ export function MapView({ showPdfOverlay, onClosePdfOverlay }: MapViewProps = {}
           pathOptions={{ color: '#60a5fa', weight: 2, dashArray: '6 4' }}
         />
       )}
-      {/* First line point preview */}
+      {/* In-progress line/path preview */}
+      {editMode === 'draw-line' && drawPoints.length >= 2 && (
+        <Polyline
+          positions={drawPoints}
+          pathOptions={{ color: '#f97316', weight: 2, dashArray: '6 4' }}
+        />
+      )}
       {editMode === 'draw-line' && drawPoints.length === 1 && (
-        <>
-          <CircleMarker
-            center={drawPoints[0]}
-            radius={6}
-            pathOptions={{ color: '#60a5fa', fillColor: '#1d4ed8', fillOpacity: 1, weight: 2 }}
-          />
-          <Tooltip permanent direction="right" offset={[8, 0]}>
-            Click second point to complete line
-          </Tooltip>
-        </>
+        <CircleMarker
+          center={drawPoints[0]}
+          radius={6}
+          pathOptions={{ color: '#f97316', fillColor: '#f97316', fillOpacity: 1, weight: 2 }}
+        />
       )}
 
       {/* Map event handler for drawing / cursor */}
       <DrawingHandler
         editMode={editMode}
         activeMapId={selectedMapId}
-        onLineDrawn={handleLineDraw}
         onPolygonVertex={handleAddPoint}
         onPolygonClose={handlePolygonClose}
+        onLineClose={handleLineClose}
         onCancelDraw={useCallback(() => { clearDrawPoints(); setEditMode('select'); }, [clearDrawPoints, setEditMode])}
         onTextPlace={handleTextPlace}
         drawPoints={drawPoints}
