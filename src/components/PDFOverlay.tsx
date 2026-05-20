@@ -509,7 +509,7 @@ export function PDFOverlayFeature({ onClose }: Props) {
           transform: `rotate(${rotation}deg)`,
           transformOrigin: "center center",
           pointerEvents: locked ? "none" : "auto",
-          zIndex: 450,
+          zIndex: 300,
           cursor: locked ? "default" : "move",
           userSelect: "none",
           // Animate position/size during Leaflet zoom to match its 250ms CSS transition

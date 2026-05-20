@@ -318,6 +318,10 @@ function EditingOverlay({ mapId, elementId }: EditingOverlayProps) {
   const deletePathVertex = useStore(s => s.deletePathVertex);
 
   const [snapTarget, setSnapTarget] = useState<[number, number] | null>(null);
+  // Tracks the last coord committed by setLatLng during a drag so dragend
+  // can use it instead of e.target.getLatLng() (which reflects Leaflet's
+  // unsynced internal drag state after a forced setLatLng call).
+  const lastDragCoordRef = useRef<[number, number] | null>(null);
 
   const trySnap = useCallback((lat: number, lon: number) => {
     const s = findSnap(lat, lon, map, parsedFile, [], elementId);
@@ -365,12 +369,14 @@ function EditingOverlay({ mapId, elementId }: EditingOverlayProps) {
               drag(e) {
                 const { lat, lng } = (e.target as L.Marker).getLatLng();
                 const snapped = trySnap(lat, lng);
+                lastDragCoordRef.current = snapped;
                 (e.target as L.Marker).setLatLng(snapped);
               },
-              dragend(e) {
-                const pos = (e.target as L.Marker).getLatLng();
+              dragend() {
+                const coord = lastDragCoordRef.current;
+                lastDragCoordRef.current = null;
                 setSnapTarget(null);
-                updatePolygonVertex(mapId, elementId, i, pos.lat, pos.lng);
+                if (coord) updatePolygonVertex(mapId, elementId, i, coord[0], coord[1]);
               },
               contextmenu() {
                 deletePolygonVertex(mapId, elementId, i);
@@ -402,12 +408,14 @@ function EditingOverlay({ mapId, elementId }: EditingOverlayProps) {
               drag(e) {
                 const { lat, lng } = (e.target as L.Marker).getLatLng();
                 const snapped = trySnap(lat, lng);
+                lastDragCoordRef.current = snapped;
                 (e.target as L.Marker).setLatLng(snapped);
               },
-              dragend(e) {
-                const pos = (e.target as L.Marker).getLatLng();
+              dragend() {
+                const coord = lastDragCoordRef.current;
+                lastDragCoordRef.current = null;
                 setSnapTarget(null);
-                updateLineEndpoint(mapId, elementId, which, pos.lat, pos.lng);
+                if (coord) updateLineEndpoint(mapId, elementId, which, coord[0], coord[1]);
               },
             }}
           >
@@ -456,12 +464,14 @@ function EditingOverlay({ mapId, elementId }: EditingOverlayProps) {
               drag(e) {
                 const { lat, lng } = (e.target as L.Marker).getLatLng();
                 const snapped = trySnap(lat, lng);
+                lastDragCoordRef.current = snapped;
                 (e.target as L.Marker).setLatLng(snapped);
               },
-              dragend(e) {
-                const pos = (e.target as L.Marker).getLatLng();
+              dragend() {
+                const coord = lastDragCoordRef.current;
+                lastDragCoordRef.current = null;
                 setSnapTarget(null);
-                updatePathVertex(mapId, elementId, vi, pos.lat, pos.lng);
+                if (coord) updatePathVertex(mapId, elementId, vi, coord[0], coord[1]);
               },
               contextmenu() {
                 if (N > 1) deletePathVertex(mapId, elementId, vi);
@@ -620,6 +630,7 @@ function TextEditOverlay({ mapId, elementId }: { mapId: string; elementId: strin
   const [dragCoord, setDragCoord] = useState<[number, number]>([0, 0]);
   const [localText, setLocalText] = useState('');
   const [pt, setPt] = useState<L.Point>(() => map.latLngToContainerPoint([0, 0]));
+  const lastDragCoordRef = useRef<[number, number] | null>(null);
 
   const trySnap = useCallback((lat: number, lon: number) => {
     const s = findSnap(lat, lon, map, parsedFile, [], elementId);
@@ -662,13 +673,15 @@ function TextEditOverlay({ mapId, elementId }: { mapId: string; elementId: strin
           drag(e) {
             const { lat, lng } = (e.target as L.Marker).getLatLng();
             const snapped = trySnap(lat, lng);
+            lastDragCoordRef.current = snapped;
             (e.target as L.Marker).setLatLng(snapped);
             setDragCoord(snapped);
           },
-          dragend(e) {
-            const { lat, lng } = (e.target as L.Marker).getLatLng();
+          dragend() {
+            const coord = lastDragCoordRef.current;
+            lastDragCoordRef.current = null;
             setSnapTarget(null);
-            commit(localText, lat, lng);
+            if (coord) commit(localText, coord[0], coord[1]);
           },
         }}
       />
