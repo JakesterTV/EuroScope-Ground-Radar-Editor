@@ -490,6 +490,19 @@ export function PDFOverlayFeature({ onClose }: Props) {
     );
   }
 
+  // Create a dedicated Leaflet pane for the PDF image so it sits between
+  // tilePane (z-index 200) and overlayPane (z-index 400) inside the map's
+  // own stacking context. Controls stay in the outer container at high z-index.
+  useEffect(() => {
+    if (!map.getPane("pdfPane")) {
+      const pane = map.createPane("pdfPane");
+      pane.style.zIndex = "300";
+      pane.style.pointerEvents = "none"; // pane itself is click-through; img re-enables when unlocked
+    }
+  }, [map]);
+
+  const pdfPane = map.getPane("pdfPane");
+
   // No PDF loaded yet
   if (!pdfUrl) {
     return createPortal(fileInput, container);
@@ -497,26 +510,26 @@ export function PDFOverlayFeature({ onClose }: Props) {
 
   const { x, y, w, h } = box;
 
-  return createPortal(
+  return (
     <>
-      {fileInput}
+      {createPortal(fileInput, container)}
 
-      {/* PDF image */}
-      <div
-        style={{
-          position: "absolute",
-          left: x, top: y, width: w, height: h,
-          transform: `rotate(${rotation}deg)`,
-          transformOrigin: "center center",
-          pointerEvents: locked ? "none" : "auto",
-          zIndex: 300,
-          cursor: locked ? "default" : "move",
-          userSelect: "none",
-          // Animate position/size during Leaflet zoom to match its 250ms CSS transition
-          transition: isZooming
-            ? "left 0.25s cubic-bezier(0,0,0.25,1), top 0.25s cubic-bezier(0,0,0.25,1), width 0.25s cubic-bezier(0,0,0.25,1), height 0.25s cubic-bezier(0,0,0.25,1)"
-            : "none",
-        }}
+      {/* PDF image — rendered into the custom pdfPane so it sits between
+          tilePane (200) and overlayPane (400) in Leaflet's stacking context */}
+      {pdfPane && createPortal(
+        <div
+          style={{
+            position: "absolute",
+            left: x, top: y, width: w, height: h,
+            transform: `rotate(${rotation}deg)`,
+            transformOrigin: "center center",
+            pointerEvents: locked ? "none" : "auto",
+            cursor: locked ? "default" : "move",
+            userSelect: "none",
+            transition: isZooming
+              ? "left 0.25s cubic-bezier(0,0,0.25,1), top 0.25s cubic-bezier(0,0,0.25,1), width 0.25s cubic-bezier(0,0,0.25,1), height 0.25s cubic-bezier(0,0,0.25,1)"
+              : "none",
+          }}
         onMouseDown={handleDragMouseDown}
       >
         <img
@@ -566,9 +579,12 @@ export function PDFOverlayFeature({ onClose }: Props) {
             />
           </>
         )}
-      </div>
+      </div>,
+        pdfPane,
+      )}
 
-      {/* Controls panel */}
+      {/* Controls panel — rendered into the outer container at high z-index */}
+      {createPortal(
       <div
         style={{
           position: "absolute", bottom: 28, left: "50%",
@@ -631,8 +647,9 @@ export function PDFOverlayFeature({ onClose }: Props) {
           className="text-slate-500 hover:text-slate-200 text-xl leading-none ml-1 transition-colors"
           title="Remove PDF overlay"
         >x</button>
-      </div>
-    </>,
-    container,
+      </div>,
+        container,
+      )}
+    </>
   );
 }
