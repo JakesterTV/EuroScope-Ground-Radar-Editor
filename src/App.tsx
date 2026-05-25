@@ -26,7 +26,10 @@ export default function App() {
   // or via URL hash if the popup redirected back to this page directly.
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      if (!e.origin.startsWith('http://localhost')) return;
+      // Allow same origin (production) and any localhost port (development).
+      const sameOrigin = e.origin === window.location.origin;
+      const isLocalhost = e.origin.startsWith('http://localhost');
+      if (!sameOrigin && !isLocalhost) return;
       if (e.data?.type === 'github_oauth_token' && typeof e.data.token === 'string') {
         setGithubToken(e.data.token);
         setShowGitHub(true);
